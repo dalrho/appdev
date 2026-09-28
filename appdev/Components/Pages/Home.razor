@@ -1,5 +1,6 @@
 @page "/"
 @inject NyanStateService State
+@inject ReviewsService Reviews
 @inject NavigationManager Nav
 @rendermode InteractiveServer
 
@@ -14,9 +15,15 @@
             <span class="nyan-paw">🐾</span>
         </div>
     </div>
-    <button class="nyan-settings-btn" title="Settings / Whimsies" @onclick='() => Nav.NavigateTo("/settings")'>
-        ⚙️
-    </button>
+    <div style="display: flex; gap: 0.6rem; align-items: center;">
+        <button class="nyan-pill-btn" title="Ratings & Comments" @onclick='() => Nav.NavigateTo("/reviews")' style="padding: 0.45rem 0.95rem; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+            <span>⭐</span>
+            <span>Reviews (@Reviews.GetTotalCount())</span>
+        </button>
+        <button class="nyan-settings-btn" title="Settings / Whimsies" @onclick='() => Nav.NavigateTo("/settings")'>
+            ⚙️
+        </button>
+    </div>
 </header>
 
 <!-- Hero Section -->
@@ -49,6 +56,10 @@
         </button>
         <div class="nyan-card-footer-note">
             No sign-up needed · 100% on-device ✨
+        </div>
+        <div class="nyan-card-footer-note" style="margin-top: 0.6rem; cursor: pointer; color: #ffa6c8; display: flex; align-items: center; justify-content: center; gap: 0.35rem;" @onclick='() => Nav.NavigateTo("/reviews")'>
+            <span>⭐</span>
+            <span><strong>@Reviews.GetAverageRating().ToString("0.0") / 5.0</strong> community rating · Read & rate 🐾</span>
         </div>
     </div>
 </section>

@@ -6,6 +6,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddScoped<appdev.Services.NyanStateService>();
+builder.Services.AddSingleton<appdev.Services.ReviewsService>();
 
 var app = builder.Build();
 

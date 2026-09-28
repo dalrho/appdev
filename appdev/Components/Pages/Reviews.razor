@@ -1,0 +1,468 @@
+@page "/reviews"
+@page "/ratings"
+@rendermode InteractiveServer
+@inject ReviewsService ReviewsService
+@inject NyanStateService State
+@inject NavigationManager Nav
+@implements IDisposable
+
+<PageTitle>NyanVision - Ratings & Comments 🐾</PageTitle>
+
+<div class="nyan-reviews-page">
+    <!-- Top Bar Navigation -->
+    <header class="nyan-reviews-topbar">
+        <button class="nyan-pill-btn" @onclick='() => Nav.NavigateTo("/")'>
+            <span>← Back to Nyan</span>
+        </button>
+        <div class="nyan-topbar-title-group">
+            <h1 class="nyan-page-heading">
+                <span>Ratings & Comments</span>
+                <span class="nyan-paw">🐾</span>
+            </h1>
+            <p class="nyan-page-subheading">Share your thoughts, rate filters, and join the kawaii community! ✨</p>
+        </div>
+    </header>
+
+    @if (!string.IsNullOrEmpty(successMessage))
+    {
+        <div class="nyan-alert nyan-alert-success animate-bounce-subtle">
+            <span class="nyan-alert-icon">🎉</span>
+            <div class="nyan-alert-text">
+                <strong>Thank you!</strong> @successMessage
+            </div>
+            <button class="nyan-alert-close" @onclick="() => successMessage = string.Empty">✕</button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="nyan-alert nyan-alert-error">
+            <span class="nyan-alert-icon">⚠️</span>
+            <div class="nyan-alert-text">@errorMessage</div>
+            <button class="nyan-alert-close" @onclick="() => errorMessage = string.Empty">✕</button>
+        </div>
+    }
+
+    <!-- Top Summary & Stats Grid -->
+    <section class="nyan-stats-card">
+        <div class="nyan-stats-main">
+            <div class="nyan-overall-score">
+                <span class="nyan-score-number">@ReviewsService.GetAverageRating().ToString("0.0")</span>
+                <div class="nyan-score-stars">
+                    @for (int i = 1; i <= 5; i++)
+                    {
+                        var isFull = i <= Math.Round(ReviewsService.GetAverageRating());
+                        <span class="star-icon @(isFull ? "active" : "")">★</span>
+                    }
+                </div>
+                <span class="nyan-score-count">Based on @ReviewsService.GetTotalCount() community reviews</span>
+            </div>
+
+            <!-- Breakdown Bars -->
+            <div class="nyan-breakdown-list">
+                @for (int stars = 5; stars >= 1; stars--)
+                {
+                    var s = stars;
+                    var count = ReviewsService.GetRatingCount(s);
+                    var total = ReviewsService.GetTotalCount();
+                    var pct = total > 0 ? (count * 100) / total : 0;
+                    var isSelected = filterStar == s;
+
+                    <div class="nyan-breakdown-row @(isSelected ? "selected" : "")" @onclick="() => ToggleStarFilter(s)" title="Filter by @s stars">
+                        <span class="nyan-breakdown-label">@s ★</span>
+                        <div class="nyan-progress-track">
+                            <div class="nyan-progress-fill" style="width: @pct%;"></div>
+                        </div>
+                        <span class="nyan-breakdown-qty">@count</span>
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+
+    <!-- Form Section: Add Rating & Comment -->
+    <section class="nyan-form-card" id="post-review-box">
+        <div class="nyan-form-header">
+            <div class="nyan-form-icon">✍️</div>
+            <div>
+                <h2 class="nyan-form-title">Leave a Rating & Comment</h2>
+                <p class="nyan-form-subtitle">Let everyone know how your nyan stream went!</p>
+            </div>
+        </div>
+
+        <form @onsubmit="HandleSubmitReview" @onsubmit:preventDefault>
+            <!-- Name & Avatar Row -->
+            <div class="nyan-form-row">
+                <div class="nyan-input-field flex-grow">
+                    <label class="nyan-label" for="username-input">Your Name / Handle</label>
+                    <div class="nyan-input-wrapper">
+                        <input id="username-input"
+                               type="text"
+                               class="nyan-text-input"
+                               placeholder="e.g. SakuraKitten, PixelPilot..."
+                               @bind="newUserName"
+                               maxlength="32" />
+                    </div>
+                </div>
+
+                <div class="nyan-input-field avatar-picker-field">
+                    <label class="nyan-label">Choose Avatar</label>
+                    <div class="nyan-avatar-options">
+                        @foreach (var avatar in avatarOptions)
+                        {
+                            <button type="button"
+                                    class="avatar-option-btn @(selectedAvatar == avatar ? "selected" : "")"
+                                    @onclick="() => selectedAvatar = avatar">
+                                @avatar
+                            </button>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category & Star Rating Row -->
+            <div class="nyan-form-row">
+                <div class="nyan-input-field flex-grow">
+                    <label class="nyan-label" for="category-select">Feature / Filter Tag</label>
+                    <select id="category-select" class="nyan-select-input" @bind="newCategory">
+                        <option value="General Feedback">🌟 General Experience</option>
+                        <option value="Cat Ears + Lasers">🐱 Cat Ears + Lasers</option>
+                        <option value="Blushing Potato">🥔 Blushing Potato</option>
+                        <option value="Big Anime Eyes">🥺 Big Anime Eyes</option>
+                        <option value="Nyan Trail">🌈 Nyan Rainbow Trail</option>
+                        <option value="Camera & Performance">⚡ Camera & Performance</option>
+                        <option value="Feature Request">💡 Feature Request</option>
+                    </select>
+                </div>
+
+                <div class="nyan-input-field rating-picker-field">
+                    <label class="nyan-label">Your Rating</label>
+                    <div class="nyan-star-selector" @onmouseleave="() => hoverRating = 0">
+                        @for (int i = 1; i <= 5; i++)
+                        {
+                            var starValue = i;
+                            var isHighlighted = (hoverRating > 0 ? starValue <= hoverRating : starValue <= newRating);
+
+                            <button type="button"
+                                    class="star-btn @(isHighlighted ? "highlighted" : "")"
+                                    @onmouseover="() => hoverRating = starValue"
+                                    @onclick="() => newRating = starValue"
+                                    aria-label="Rate @starValue stars">
+                                ★
+                            </button>
+                        }
+                        <span class="rating-feedback-badge">
+                            @GetRatingText(hoverRating > 0 ? hoverRating : newRating)
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Comment Text Area -->
+            <div class="nyan-input-field">
+                <div class="nyan-label-with-counter">
+                    <label class="nyan-label" for="comment-text">Your Comment</label>
+                    <span class="nyan-char-counter @(newComment.Length > 450 ? "warn" : "")">
+                        @newComment.Length / 500
+                    </span>
+                </div>
+                <textarea id="comment-text"
+                          class="nyan-textarea"
+                          rows="4"
+                          placeholder="What did you think of the filters? Did your friends like your sparkles? Share details here! 💕"
+                          @bind="newComment"
+                          @bind:event="oninput"
+                          maxlength="500"></textarea>
+            </div>
+
+            <!-- Submit Action -->
+            <div class="nyan-form-actions">
+                <button type="button" class="nyan-btn-secondary" @onclick="ResetForm">
+                    Reset
+                </button>
+                <button type="submit" class="nyan-btn-submit">
+                    <span>💖 Post Review</span>
+                    <span>🐾</span>
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <!-- Reviews Filter & List Section -->
+    <section class="nyan-reviews-list-section">
+        <div class="nyan-filter-bar">
+            <!-- Search Input -->
+            <div class="nyan-search-box">
+                <span class="search-icon">🔍</span>
+                <input type="text"
+                       class="nyan-search-input"
+                       placeholder="Search reviews or usernames..."
+                       @bind="searchQuery"
+                       @bind:event="oninput" />
+                @if (!string.IsNullOrEmpty(searchQuery))
+                {
+                    <button class="clear-search-btn" @onclick="() => searchQuery = string.Empty">✕</button>
+                }
+            </div>
+
+            <!-- Star Filter Pills -->
+            <div class="nyan-filter-pills">
+                <button type="button"
+                        class="filter-pill @(filterStar == null ? "active" : "")"
+                        @onclick="() => filterStar = null">
+                    All (@ReviewsService.GetTotalCount())
+                </button>
+                @for (int s = 5; s >= 1; s--)
+                {
+                    var starNum = s;
+                    var count = ReviewsService.GetRatingCount(starNum);
+                    <button type="button"
+                            class="filter-pill @(filterStar == starNum ? "active" : "")"
+                            @onclick="() => ToggleStarFilter(starNum)">
+                        @starNum ★ (@count)
+                    </button>
+                }
+            </div>
+
+            <!-- Sorting Select -->
+            <div class="nyan-sort-wrapper">
+                <label class="sort-label">Sort:</label>
+                <select class="nyan-sort-select" @bind="sortBy">
+                    <option value="newest">✨ Newest First</option>
+                    <option value="highest">⭐ Highest Rating</option>
+                    <option value="lowest">🌱 Lowest Rating</option>
+                    <option value="popular">💖 Most Liked</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Review Cards -->
+        @{
+            var displayedReviews = GetFilteredReviews();
+        }
+
+        @if (!displayedReviews.Any())
+        {
+            <div class="nyan-empty-state">
+                <div class="empty-icon">🐱💤</div>
+                <h3>No reviews found</h3>
+                <p>Try clearing your search query or star filter to see all comments!</p>
+                <button class="nyan-btn-secondary" @onclick="ClearAllFilters">Clear Filters</button>
+            </div>
+        }
+        else
+        {
+            <div class="nyan-reviews-grid">
+                @foreach (var review in displayedReviews)
+                {
+                    <div class="nyan-review-card" @key="review.Id">
+                        <div class="review-card-header">
+                            <div class="user-info-group">
+                                <div class="user-avatar-bubble">@review.UserAvatar</div>
+                                <div>
+                                    <div class="user-name-line">
+                                        <span class="user-name">@review.UserName</span>
+                                        <span class="verified-tag">✨ Nyan Fan</span>
+                                    </div>
+                                    <span class="review-time">@FormatRelativeTime(review.CreatedAt)</span>
+                                </div>
+                            </div>
+
+                            <div class="review-badge-group">
+                                <span class="category-pill">@review.Category</span>
+                                <div class="review-stars">
+                                    @for (int i = 1; i <= 5; i++)
+                                    {
+                                        <span class="review-star @(i <= review.Rating ? "filled" : "empty")">★</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="review-body">
+                            <p class="review-text">@review.Comment</p>
+                        </div>
+
+                        <div class="review-card-footer">
+                            <button type="button"
+                                    class="like-btn @(review.IsLiked ? "liked" : "")"
+                                    @onclick="() => ReviewsService.ToggleLike(review.Id)">
+                                <span>@(review.IsLiked ? "💖" : "🤍")</span>
+                                <span>@review.LikesCount</span>
+                            </button>
+
+                            <button type="button"
+                                    class="delete-btn"
+                                    title="Delete comment"
+                                    @onclick="() => DeleteReview(review.Id)">
+                                🗑️ Remove
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+</div>
+
+@code {
+    private string newUserName = "";
+    private string selectedAvatar = "🐱";
+    private int newRating = 5;
+    private int hoverRating = 0;
+    private string newCategory = "General Feedback";
+    private string newComment = "";
+
+    private string searchQuery = "";
+    private int? filterStar = null;
+    private string sortBy = "newest";
+
+    private string successMessage = "";
+    private string errorMessage = "";
+
+    private readonly string[] avatarOptions = new[] { "🐱", "🐰", "🦊", "🐶", "🦄", "🐼", "🐸", "🌸" };
+
+    protected override void OnInitialized()
+    {
+        ReviewsService.OnChange += StateHasChanged;
+    }
+
+    public void Dispose()
+    {
+        ReviewsService.OnChange -= StateHasChanged;
+    }
+
+    private void ToggleStarFilter(int star)
+    {
+        if (filterStar == star)
+        {
+            filterStar = null;
+        }
+        else
+        {
+            filterStar = star;
+        }
+    }
+
+    private void ClearAllFilters()
+    {
+        searchQuery = "";
+        filterStar = null;
+        sortBy = "newest";
+    }
+
+    private string GetRatingText(int rating) => rating switch
+    {
+        1 => "Needs catnip 😿",
+        2 => "Could be cuter 🐾",
+        3 => "Pretty cute 🌸",
+        4 => "Super kawaii! ✨",
+        5 => "Purrfect Nyan! 💕",
+        _ => "Select rating"
+    };
+
+    private void HandleSubmitReview()
+    {
+        errorMessage = "";
+        successMessage = "";
+
+        if (string.IsNullOrWhiteSpace(newUserName))
+        {
+            errorMessage = "Please enter your name or a cute handle!";
+            return;
+        }
+
+        if (newRating < 1 || newRating > 5)
+        {
+            errorMessage = "Please select a rating between 1 and 5 stars!";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(newComment))
+        {
+            errorMessage = "Please write a comment or review before posting!";
+            return;
+        }
+
+        var review = new ReviewItem
+        {
+            UserName = newUserName.Trim(),
+            UserAvatar = selectedAvatar,
+            Rating = newRating,
+            Category = newCategory,
+            Comment = newComment.Trim(),
+            CreatedAt = DateTime.Now,
+            LikesCount = 0,
+            IsLiked = false
+        };
+
+        ReviewsService.AddReview(review);
+
+        successMessage = $"Your review was posted successfully! Thank you for supporting NyanVision 💕";
+
+        // Reset inputs
+        newComment = "";
+        newUserName = "";
+        newRating = 5;
+        hoverRating = 0;
+    }
+
+    private void ResetForm()
+    {
+        newUserName = "";
+        selectedAvatar = "🐱";
+        newRating = 5;
+        hoverRating = 0;
+        newCategory = "General Feedback";
+        newComment = "";
+        errorMessage = "";
+    }
+
+    private void DeleteReview(string id)
+    {
+        var removed = ReviewsService.DeleteReview(id);
+        if (removed)
+        {
+            successMessage = "Comment was removed.";
+        }
+    }
+
+    private IEnumerable<ReviewItem> GetFilteredReviews()
+    {
+        var items = ReviewsService.GetAllReviews().AsEnumerable();
+
+        if (filterStar.HasValue)
+        {
+            items = items.Where(r => r.Rating == filterStar.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchQuery))
+        {
+            var q = searchQuery.Trim().ToLowerInvariant();
+            items = items.Where(r =>
+                (r.UserName != null && r.UserName.ToLowerInvariant().Contains(q)) ||
+                (r.Comment != null && r.Comment.ToLowerInvariant().Contains(q)) ||
+                (r.Category != null && r.Category.ToLowerInvariant().Contains(q)));
+        }
+
+        items = sortBy switch
+        {
+            "highest" => items.OrderByDescending(r => r.Rating).ThenByDescending(r => r.CreatedAt),
+            "lowest" => items.OrderBy(r => r.Rating).ThenByDescending(r => r.CreatedAt),
+            "popular" => items.OrderByDescending(r => r.LikesCount).ThenByDescending(r => r.CreatedAt),
+            _ => items.OrderByDescending(r => r.CreatedAt)
+        };
+
+        return items.ToList();
+    }
+
+    private string FormatRelativeTime(DateTime dt)
+    {
+        var span = DateTime.Now - dt;
+        if (span.TotalMinutes < 1) return "Just now";
+        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}m ago";
+        if (span.TotalHours < 24) return $"{(int)span.TotalHours}h ago";
+        if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
+        return dt.ToString("MMM d, yyyy");
+    }
+}
