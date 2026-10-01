@@ -1,4 +1,4 @@
-# NyanVision (`dalrho/appdev`) — Project Evaluation
+# Project Evaluation
 
 ## Overall Ratings
 
